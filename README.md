@@ -4,7 +4,7 @@
 
 ### 注册一个GLaDOS的账号([注册地址](https://glados.space/landing/0A58E-NV28S-6U3QV-33VMG))
 
-#### 我的邀请码：([0A58E-NV28S-6U3QV-33VMG](https://0a58e-nv28s-6u3qv-33vmg.glados.space)) 
+#### 我的邀请码：([74V0U-STDNS-O86IX-QB9DH](https://74v0u-stdns-o86ix-qb9dh.glados.space)) 
 
 ### **Fork**本仓库
 
@@ -32,7 +32,7 @@
 
 3. 手机推送（非必须）
 
-- 添加1个`repository secret`，命名为`SENDKEY`，其值对应 PushDeer key: ([获取地址](https://www.pushdeer.com/product.html))。
+- 添加1个`repository secret`，命名为`SENDKEY`，其值对应 Pushplus token: ([获取地址](https://www.pushplus.plus))。
 
 ### **star**自己的仓库
 
@@ -51,3 +51,4 @@
 ## 声明
 
 本项目不保证稳定运行与更新, 因GitHub相关规定可能会删库, 请注意备份
+
