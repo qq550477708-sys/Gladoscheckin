@@ -2,14 +2,13 @@ import requests
 import json
 import os
 
-from pypushdeer import PushDeer
-
 # -------------------------------------------------------------------------------------------
 # github workflows
 # -------------------------------------------------------------------------------------------
 if __name__ == '__main__':
-    # pushdeer key 申请地址 https://www.pushdeer.com/product.html
-    sckey = os.environ.get("SENDKEY", "")
+    # PushPlus token 申请地址 https://www.pushplus.plus/
+    # 替换原 SENDKEY 为 PUSHPLUS_TOKEN（保持兼容也可继续使用 SENDKEY）
+    pushplus_token = os.environ.get("PUSHPLUS_TOKEN", os.environ.get("SENDKEY", ""))
 
     # 推送内容
     title = ""
@@ -17,9 +16,10 @@ if __name__ == '__main__':
     context = ""
 
     # glados账号cookie 直接使用数组 如果使用环境变量需要字符串分割一下
-    cookies = os.environ.get("COOKIES", []).split("&")
-    if cookies[0] != "":
+    cookies_str = os.environ.get("COOKIES", "")
+    cookies = cookies_str.split("&") if cookies_str else []  # 修复空字符串分割的潜在问题
 
+    if cookies and cookies[0] != "":
         check_in_url = "https://glados.space/api/user/checkin"        # 签到地址
         status_url = "https://glados.space/api/user/status"          # 查看账户状态
 
@@ -31,29 +31,65 @@ if __name__ == '__main__':
         }
         
         for cookie in cookies:
-            checkin = requests.post(check_in_url, headers={'cookie': cookie, 'referer': referer, 'origin': origin,
-                                    'user-agent': useragent, 'content-type': 'application/json;charset=UTF-8'}, data=json.dumps(payload))
-            state = requests.get(status_url, headers={
-                                'cookie': cookie, 'referer': referer, 'origin': origin, 'user-agent': useragent})
+            if not cookie:  # 跳过空cookie
+                continue
+            try:
+                checkin = requests.post(
+                    check_in_url, 
+                    headers={
+                        'cookie': cookie, 
+                        'referer': referer, 
+                        'origin': origin,
+                        'user-agent': useragent, 
+                        'content-type': 'application/json;charset=UTF-8'
+                    }, 
+                    data=json.dumps(payload),
+                    timeout=10  # 添加请求超时
+                )
+                state = requests.get(
+                    status_url, 
+                    headers={
+                        'cookie': cookie, 
+                        'referer': referer, 
+                        'origin': origin, 
+                        'user-agent': useragent
+                    },
+                    timeout=10  # 添加请求超时
+                )
+            except requests.exceptions.RequestException as e:
+                email = ""
+                message_status = f"请求异常: {str(e)}"
+                message_days = "error"
+                fail += 1
+                context += "账号: " + email + ", P: 0, 剩余: " + message_days + " | " + message_status + "\n"
+                continue
 
             message_status = ""
             points = 0
             message_days = ""
             
-            
             if checkin.status_code == 200:
                 # 解析返回的json数据
-                result = checkin.json()     
+                try:
+                    result = checkin.json()
+                except json.JSONDecodeError:
+                    result = {}
                 # 获取签到结果
-                check_result = result.get('message')
-                points = result.get('points')
+                check_result = result.get('message', '解析失败')
+                points = result.get('points', 0)
 
                 # 获取账号当前状态
-                result = state.json()
+                try:
+                    state_result = state.json()
+                except json.JSONDecodeError:
+                    state_result = {'data': {}}
                 # 获取剩余时间
-                leftdays = int(float(result['data']['leftDays']))
+                try:
+                    leftdays = int(float(state_result.get('data', {}).get('leftDays', 0)))
+                except (ValueError, TypeError):
+                    leftdays = None
                 # 获取账号email
-                email = result['data']['email']
+                email = state_result.get('data', {}).get('email', '未知账号')
                 
                 print(check_result)
                 if "Checkin! Got" in check_result:
@@ -66,32 +102,53 @@ if __name__ == '__main__':
                     fail += 1
                     message_status = "签到失败，请检查..."
 
-                if leftdays is not None:
-                    message_days = f"{leftdays} 天"
-                else:
-                    message_days = "error"
+                message_days = f"{leftdays} 天" if leftdays is not None else "error"
             else:
-                email = ""
-                message_status = "签到请求URL失败, 请检查..."
+                email = "未知账号"
+                message_status = f"签到请求失败，状态码: {checkin.status_code}"
                 message_days = "error"
+                fail += 1
 
-            context += "账号: " + email + ", P: " + str(points) +", 剩余: " + message_days + " | "
+            context += f"账号: {email}, P: {str(points)}, 剩余: {message_days} | {message_status}\n"
 
         # 推送内容 
-        title = f'Glados, 成功{success},失败{fail},重复{repeats}'
+        title = f'Glados 签到结果: 成功{success},失败{fail},重复{repeats}'
         print("Send Content:" + "\n", context)
         
     else:
         # 推送内容 
-        title = f'# 未找到 cookies!'
+        title = f'# 未找到有效 cookies!'
+        context = "请检查 COOKIES 环境变量配置是否正确"
 
-    print("sckey:", sckey)
+    print("pushplus_token:", pushplus_token)
     print("cookies:", cookies)
     
-    # 推送消息
-    # 未设置 sckey 则不进行推送
-    if not sckey:
-        print("Not push")
+    # 推送消息：PushPlus 实现
+    # 未设置 pushplus_token 则不进行推送
+    if not pushplus_token:
+        print("Not push (未配置 PushPlus Token)")
     else:
-        pushdeer = PushDeer(pushkey=sckey) 
-        pushdeer.send_text(title, desp=context)
+        # PushPlus 接口地址
+        pushplus_url = "http://www.pushplus.plus/send"
+        # 构造推送参数
+        push_data = {
+            "token": pushplus_token,
+            "title": title,
+            "content": context,
+            "template": "txt"  # 文本格式，可选：html、markdown、txt
+        }
+        try:
+            # 发送推送请求
+            response = requests.post(
+                pushplus_url,
+                json=push_data,  # 直接使用 json 参数，自动序列化并设置 Content-Type
+                timeout=15
+            )
+            response.raise_for_status()  # 抛出 HTTP 错误状态码异常
+            push_result = response.json()
+            if push_result.get("code") == 200:
+                print("PushPlus 推送成功")
+            else:
+                print(f"PushPlus 推送失败: {push_result.get('msg', '未知错误')}")
+        except requests.exceptions.RequestException as e:
+            print(f"PushPlus 推送请求异常: {str(e)}")
